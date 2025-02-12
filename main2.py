@@ -26,7 +26,7 @@ ALLOWED_USERS = [
     'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716'
 ]
 # Dummy chat IDs of authorized users for notifications – replace with actual chat IDs.
-ALLOWED_CHAT_IDS = [111111111, 222222222]
+ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927]
 
 # Target coins for which notifications will be sent
 TARGET_COINS = ['BTCUSDT', 'XRPUSDT', 'AVAXUSDT', 'ETHUSDT']
