@@ -3,7 +3,7 @@ import ta
 import aiohttp
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, Message
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -22,11 +22,10 @@ logger = logging.getLogger(__name__)
 
 # List of allowed usernames (for /start access) and allowed chat IDs (for notifications)
 ALLOWED_USERS = [
-    'paraloperceo', 'LaunchControll', 'ensalgz', 'gorkemk6',
-    'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716'
+    'paraloperceo'
 ]
 # Dummy chat IDs of authorized users for notifications – replace with actual chat IDs.
-ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927]
+ALLOWED_CHAT_IDS = [5124738136, 222222222]
 
 # Target coins for which notifications will be sent
 TARGET_COINS = ['BTCUSDT', 'XRPUSDT', 'AVAXUSDT', 'ETHUSDT']
@@ -36,6 +35,20 @@ daily_notification_data = {
     'date': None,
     'count': 0
 }
+
+# Global dictionary to track the last activity time for each chat
+user_last_active = {}
+
+# Inactivity threshold (e.g., 10 minutes)
+INACTIVITY_THRESHOLD = timedelta(minutes=10)
+
+def update_user_activity(update: Update) -> None:
+    """
+    Update the last active time for the user issuing a command.
+    """
+    if update.effective_chat:
+        chat_id = update.effective_chat.id
+        user_last_active[chat_id] = datetime.utcnow()
 
 async def get_crypto_data(symbol: str, interval: str = '4h', limit: int = 100) -> pd.DataFrame:
     """
@@ -98,10 +111,17 @@ def calculate_atr(data: pd.DataFrame, period: int = 14) -> float:
     atr_indicator = ta.volatility.AverageTrueRange(high=data['high'], low=data['low'], close=data['close'], window=period)
     return atr_indicator.average_true_range().iloc[-1]
 
+def calculate_entry_price(data: pd.DataFrame) -> float:
+    """
+    Calculate the entry price for a trade.
+    Here, we use the open price of the signal candle as the entry point.
+    """
+    return data['open'].iloc[-1]
+
 async def get_technical_indicators(symbol: str) -> dict:
     """
-    Fetch market data and compute technical indicators including pivot points, MACD, ATR, EMA, and OBV.
-    Uses a 4h timeframe for a medium-term view.
+    Fetch market data and compute technical indicators including pivot points, MACD, ATR, EMA, OBV,
+    and now also the entry price. Uses a 4h timeframe for a medium-term view.
     """
     try:
         data = await get_crypto_data(symbol, interval='4h', limit=100)
@@ -112,6 +132,7 @@ async def get_technical_indicators(symbol: str) -> dict:
         data = calculate_macd(data)
         atr = calculate_atr(data)
         current_price = data['close'].iloc[-1]
+        entry_price = calculate_entry_price(data)
 
         # Additional trend filters: 50-period EMA and OBV for volume confirmation.
         data['ema_50'] = ta.trend.EMAIndicator(close=data['close'], window=50).ema_indicator()
@@ -121,6 +142,7 @@ async def get_technical_indicators(symbol: str) -> dict:
             'pivot_points': pivot_points,
             'current_price': current_price,
             'atr': atr,
+            'entry_price': entry_price,
             'data': data
         }
     except Exception as e:
@@ -171,16 +193,18 @@ def is_user_allowed(update: Update) -> bool:
     user = update.effective_user
     return user.username in ALLOWED_USERS
 
-async def send_trade_notification(context: ContextTypes.DEFAULT_TYPE, symbol: str, direction: str, entry_price: float, tp: float, sl: float) -> None:
+async def send_trade_notification(context: ContextTypes.DEFAULT_TYPE, symbol: str, direction: str,
+                                  entry_price: float, tp: float, sl: float) -> None:
     """
     Send a trade notification via Telegram to all approved chat IDs,
-    but only if the daily notification limit (4 per day) has not been exceeded.
+    including the trade's entry price, TP, and SL.
+    Notifications are sent only if the user is inactive (has not interacted in the last 10 minutes)
+    and the daily notification limit (4 per day) has not been exceeded.
     """
     global daily_notification_data
 
-    # Get current UTC date
+    # Get current UTC date and reset daily count if needed
     today = datetime.utcnow().date()
-    # Reset the daily counter if the day has changed
     if daily_notification_data.get('date') != today:
         daily_notification_data['date'] = today
         daily_notification_data['count'] = 0
@@ -189,25 +213,30 @@ async def send_trade_notification(context: ContextTypes.DEFAULT_TYPE, symbol: st
         logger.info("Daily notification limit reached. Notification not sent.")
         return
 
-    # Compose the notification message
+    # Compose the notification message with entry price, TP, and SL
     message_text = (
-        f"🚨 *Trade Alert for {symbol}* 🚨\n\n"
-        f"*Direction*: {direction}\n"
-        f"*Entry Price*: {entry_price:.2f}\n"
-        f"*Take Profit (TP)*: {tp:.2f}\n"
-        f"*Stop Loss (SL)*: {sl:.2f}\n"
+        f"Trade Signal:\n"
+        f"Coin: {symbol}\n"
+        f"Entry: {entry_price:.2f}\n"
+        f"TP: {tp:.2f}\n"
+        f"SL: {sl:.2f}\n"
     )
-    # Send message to each approved chat ID
+    # Send the message only if the user is inactive (or has no recorded activity)
     for chat_id in ALLOWED_CHAT_IDS:
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode='Markdown')
-        except Exception as e:
-            logger.error(f"Error sending notification to chat {chat_id}: {e}")
+        last_active = user_last_active.get(chat_id)
+        if last_active is None or (datetime.utcnow() - last_active) > INACTIVITY_THRESHOLD:
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=message_text, parse_mode='Markdown')
+            except Exception as e:
+                logger.error(f"Error sending notification to chat {chat_id}: {e}")
+        else:
+            logger.info(f"User in chat {chat_id} is active; skipping notification.")
 
     daily_notification_data['count'] += 1
     logger.info(f"Notification sent. Total notifications today: {daily_notification_data['count']}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    update_user_activity(update)
     if is_user_allowed(update):
         await update.message.reply_text(
             'Welcome to CoinRadar AI! 🎉\n\n'
@@ -233,10 +262,11 @@ async def loading_bar(message: Message):
 
 async def coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Process the /coin command, fetch technical indicators, generate signals,
-    and return a formatted message. Also, if the coin is in the target list and
-    a valid entry signal is identified, send a Telegram notification.
+    Process the /coin command: fetch technical indicators, generate signals,
+    display the trade's entry price along with TP and SL, and (if applicable) send a Telegram notification
+    if the user is inactive.
     """
+    update_user_activity(update)
     if not is_user_allowed(update):
         await update.message.reply_text(
             'You dont have access permission for the AI trader\n\n'
@@ -262,17 +292,16 @@ async def coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             signals = generate_signals(indicators)
             signal_message = f"🪬  *{symbol}*\n\n"
 
-            # Determine the type of signal and associated trade details
             if signals['buy_signal']:
                 signal_message += f"🚀 *Long*\n\nTP: {signals['tp_long']:.2f}\nSL: {signals['sl_long']:.2f}\n\n"
                 direction = 'Long'
-                entry_price = indicators['current_price']
+                entry_price = indicators['entry_price']
                 tp = signals['tp_long']
                 sl = signals['sl_long']
             elif signals['sell_signal']:
                 signal_message += f"🩸 *Short*\n\nTP: {signals['tp_short']:.2f}\nSL: {signals['sl_short']:.2f}\n\n"
                 direction = 'Short'
-                entry_price = indicators['current_price']
+                entry_price = indicators['entry_price']
                 tp = signals['tp_short']
                 sl = signals['sl_short']
             else:
@@ -281,9 +310,9 @@ async def coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             await update.message.reply_text(signal_message, parse_mode='Markdown')
 
-            # If this coin is among the targeted ones and there is a valid entry signal, send a notification.
+            # Send a notification only for target coins and only if a valid signal exists,
+            # and only if the user is inactive.
             if symbol in TARGET_COINS and direction is not None:
-                # Send the trade notification (asynchronously)
                 await send_trade_notification(context, symbol, direction, entry_price, tp, sl)
         else:
             await update.message.reply_text(f"⚠️ {symbol} are you sure this is correct?")
@@ -297,6 +326,7 @@ async def sell_signals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     Scan the market for short signals and return the top 7 based on signal strength.
     """
+    update_user_activity(update)
     if not is_user_allowed(update):
         await update.message.reply_text(
             'You dont have access permission for the AI trader\n\n'
@@ -343,6 +373,7 @@ async def long_signals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     Scan the market for long signals and return the top 7 based on signal strength.
     """
+    update_user_activity(update)
     if not is_user_allowed(update):
         await update.message.reply_text(
             'You dont have access permission for the AI trader\n\n'
