@@ -22,10 +22,11 @@ logger = logging.getLogger(__name__)
 
 # List of allowed usernames (for /start access) and allowed chat IDs (for notifications)
 ALLOWED_USERS = [
-    'paraloperceo'
+    'paraloperceo', 'LaunchControll', 'ensalgz', 'gorkemk6',
+    'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716'
 ]
 # Dummy chat IDs of authorized users for notifications – replace with actual chat IDs.
-ALLOWED_CHAT_IDS = [5124738136, 222222222]
+ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927]
 
 # Target coins for which notifications will be sent
 TARGET_COINS = ['BTCUSDT', 'XRPUSDT', 'AVAXUSDT', 'ETHUSDT']
