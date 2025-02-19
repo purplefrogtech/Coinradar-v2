@@ -5,7 +5,7 @@ from datetime import timedelta
 # API Anahtarları ve Tokenlar
 GEMINI_API_KEY = "AIzaSyC_CyXwRjw0MTxZDagtZ78vR_-KbPqclGc"
 BINANCE_API_URL = "https://api.binance.com/api/v3/klines"
-TOKEN = '6618291814:AAGcFpEmRgmYLn3vSmJNAtlDKNx1S8yZGMY'
+TOKEN = '6366643634:AAGegP6shTT5_XCBSgUBA_VxtVgRc-aNm_Y'
 NEWS_API_KEY = '58878f135c9c4d609f856aa552d2d12d'
 
 # Loglama ayarları
@@ -16,12 +16,16 @@ logger = logging.getLogger(__name__)
 ALLOWED_USERS = [
     'paraloperceo', 'LaunchControll', 'ensalgz', 'gorkemk6',
     'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716',
-    'Lord1334', 'thebatyroff', 'M_Senol24'
+    'Lord1334', 'thebatyroff', 'M_Senol24', 'farukaknc', 'Proakm09',
+    'Poseidonaf', 'Ferro_11_Shaman'
 ]
-ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927, 5140980618]
+ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927, 5140980618, 1307456822, 1332756927, 6123690668, 1119304862]
+
+# Hedef coin sayısını artırdık (örneğin, 15 farklı coin)
 TARGET_COINS = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT',
-    'SOLUSDT', 'DOTUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LTCUSDT'
+    'SOLUSDT', 'DOTUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LTCUSDT',
+    'LINKUSDT', 'MATICUSDT', 'XLMUSDT', 'VETUSDT', 'ICPUSDT'
 ]
 
 daily_notification_data = {'date': None, 'count': 0}
@@ -35,9 +39,18 @@ user_language = {}
 
 # Çeviri sözlüğü
 translations = {
-    "choose_language": {"en": "Please choose your language:", "tr": "Lütfen dilinizi seçiniz:"},
-    "language_set_en": {"en": "Language set to English.", "tr": "Dil İngilizce olarak ayarlandı."},
-    "language_set_tr": {"en": "Language set to Turkish.", "tr": "Dil Türkçe olarak ayarlandı."},
+    "choose_language": {
+        "en": "Please choose your language:",
+        "tr": "Lütfen dilinizi seçiniz:"
+    },
+    "language_set_en": {
+        "en": "Language set to English.",
+        "tr": "Dil İngilizce olarak ayarlandı."
+    },
+    "language_set_tr": {
+        "en": "Language set to Turkish.",
+        "tr": "Dil Türkçe olarak ayarlandı."
+    },
     "welcome_message": {
         "en": (
             "Welcome to CoinRadar AI! 🎉\n\n"
@@ -76,40 +89,151 @@ translations = {
             "/lang <en/tr> - Dil değiştirin"
         )
     },
-    "news_header": {"en": "Latest Market News:", "tr": "En Güncel Piyasa Haberleri:"},
-    "no_permission": {"en": "You don't have access permission for the AI trader.", "tr": "AI trader'a erişim izniniz yok."},
-    "join_community": {"en": "Join Global Community: @coinradarsinyal", "tr": "Global Community'e katılın: @coinradarsinyal"},
-    "trend_analysis_wait": {"en": "Performing trend analysis, please wait...", "tr": "Trend analizi yapılıyor, lütfen bekleyiniz..."},
-    "chart_wait": {"en": "Generating chart, please wait...", "tr": "Grafik oluşturuluyor, lütfen bekleyiniz..."},
-    "chart_usage": {"en": "Usage: /chart <symbol> [timeframe]. Example: /chart BTCUSDT 4h", "tr": "Kullanım: /chart <sembol> [zaman dilimi]. Örnek: /chart BTCUSDT 4h"},
-    "chart_error": {"en": "Chart could not be generated. Please check coin symbol and timeframe.", "tr": "Grafik oluşturulamadı. Lütfen coin sembolünü ve zaman dilimini kontrol ediniz."},
-    "setfavorites_usage": {"en": "Usage: /setfavorites BTCUSDT,ETHUSDT,...", "tr": "Kullanım: /setfavorites BTCUSDT,ETHUSDT,..."},
-    "favorites_set": {"en": "Favorites set: ", "tr": "Favoriler ayarlandı: "},
-    "no_favorites": {"en": "No favorites set.", "tr": "Favori ayarlanmamış."},
-    "your_favorites": {"en": "Your favorites: ", "tr": "Favorileriniz: "},
-    "setrisk_usage": {"en": "Usage: /setrisk <risk_percentage>", "tr": "Kullanım: /setrisk <risk_yüzdesi>"},
-    "risk_set": {"en": "Risk setting set to ", "tr": "Risk ayarı "},
-    "invalid_risk": {"en": "Invalid risk value.", "tr": "Geçersiz risk değeri."},
-    "no_risk": {"en": "No risk setting found.", "tr": "Risk ayarı bulunamadı."},
-    "your_risk": {"en": "Your risk setting: ", "tr": "Risk ayarınız: "},
-    "specify_coin": {"en": "Please specify a coin, e.g. /coin BTCUSDT", "tr": "Lütfen bir coin belirtin, örn. /coin BTCUSDT"},
-    "no_signal": {"en": "No Clear Signal at the moment", "tr": "Şu anda net bir sinyal yok"},
-    "risk_management": {"en": "Risk Management:", "tr": "Risk Yönetimi:"},
-    "realtime_usage": {"en": "Usage: /realtime <symbol>", "tr": "Kullanım: /realtime <sembol>"},
-    "connecting_realtime": {"en": "Connecting to real-time data for ", "tr": "Gerçek zamanlı veriye bağlanılıyor: "},
-    "error_realtime": {"en": "Error connecting to real-time data.", "tr": "Gerçek zamanlı veriye bağlanırken hata oluştu."},
-    "adv_analysis_wait": {"en": "Performing advanced analysis for ", "tr": "Gelişmiş analiz yapılıyor: "},
-    "fetching_news": {"en": "Fetching latest market news...", "tr": "En güncel piyasa haberleri getiriliyor..."},
-    "no_news": {"en": "Could not fetch news at this time.", "tr": "Şu anda haberler getirilemedi."},
-    "trade_signal": {"en": "Trade Signal", "tr": "Ticaret Sinyali"},
-    "coin": {"en": "Coin", "tr": "Coin"},
-    "direction": {"en": "Direction", "tr": "Yön"},
-    "entry": {"en": "Entry", "tr": "Giriş"},
-    "take_profit": {"en": "Take Profit", "tr": "Kar Al"},
-    "stop_loss": {"en": "Stop Loss", "tr": "Zarar Durdur"},
-    "long": {"en": "LONG", "tr": "UZUN"},
-    "short": {"en": "SHORT", "tr": "KISA"}
-    # Diğer çeviri anahtarlarını ekleyin...
+    "news_header": {
+        "en": "Latest Market News:",
+        "tr": "En Güncel Piyasa Haberleri:"
+    },
+    "no_permission": {
+        "en": "You don't have access permission for the AI trader.",
+        "tr": "AI trader'a erişim izniniz yok."
+    },
+    "join_community": {
+        "en": "Join Global Community: @coinradarsinyal",
+        "tr": "Global Community'e katılın: @coinradarsinyal"
+    },
+    "trend_analysis_wait": {
+        "en": "Performing trend analysis, please wait...",
+        "tr": "Trend analizi yapılıyor, lütfen bekleyiniz..."
+    },
+    "chart_wait": {
+        "en": "Generating chart, please wait...",
+        "tr": "Grafik oluşturuluyor, lütfen bekleyiniz..."
+    },
+    "chart_usage": {
+        "en": "Usage: /chart <symbol> [timeframe]. Example: /chart BTCUSDT 4h",
+        "tr": "Kullanım: /chart <sembol> [zaman dilimi]. Örnek: /chart BTCUSDT 4h"
+    },
+    "chart_error": {
+        "en": "Chart could not be generated. Please check coin symbol and timeframe.",
+        "tr": "Grafik oluşturulamadı. Lütfen coin sembolünü ve zaman dilimini kontrol ediniz."
+    },
+    "setfavorites_usage": {
+        "en": "Usage: /setfavorites BTCUSDT,ETHUSDT,...",
+        "tr": "Kullanım: /setfavorites BTCUSDT,ETHUSDT,..."
+    },
+    "favorites_set": {
+        "en": "Favorites set: ",
+        "tr": "Favoriler ayarlandı: "
+    },
+    "no_favorites": {
+        "en": "No favorites set.",
+        "tr": "Favori ayarlanmamış."
+    },
+    "your_favorites": {
+        "en": "Your favorites: ",
+        "tr": "Favorileriniz: "
+    },
+    "setrisk_usage": {
+        "en": "Usage: /setrisk <risk_percentage>",
+        "tr": "Kullanım: /setrisk <risk_yüzdesi>"
+    },
+    "risk_set": {
+        "en": "Risk setting set to ",
+        "tr": "Risk ayarı "
+    },
+    "invalid_risk": {
+        "en": "Invalid risk value.",
+        "tr": "Geçersiz risk değeri."
+    },
+    "no_risk": {
+        "en": "No risk setting found.",
+        "tr": "Risk ayarı bulunamadı."
+    },
+    "your_risk": {
+        "en": "Your risk setting: ",
+        "tr": "Risk ayarınız: "
+    },
+    "specify_coin": {
+        "en": "Please specify a coin, e.g. /coin BTCUSDT",
+        "tr": "Lütfen bir coin belirtin, örn. /coin BTCUSDT"
+    },
+    "no_signal": {
+        "en": "No Clear Signal at the moment",
+        "tr": "Şu anda net bir sinyal yok"
+    },
+    "risk_management": {
+        "en": "Risk Management:",
+        "tr": "Risk Yönetimi:"
+    },
+    "realtime_usage": {
+        "en": "Usage: /realtime <symbol>",
+        "tr": "Kullanım: /realtime <sembol>"
+    },
+    "connecting_realtime": {
+        "en": "Connecting to real-time data for ",
+        "tr": "Gerçek zamanlı veriye bağlanılıyor: "
+    },
+    "error_realtime": {
+        "en": "Error connecting to real-time data.",
+        "tr": "Gerçek zamanlı veriye bağlanırken hata oluştu."
+    },
+    "adv_analysis_wait": {
+        "en": "Performing advanced analysis for ",
+        "tr": "Gelişmiş analiz yapılıyor: "
+    },
+    "fetching_news": {
+        "en": "Fetching latest market news...",
+        "tr": "En güncel piyasa haberleri getiriliyor..."
+    },
+    "no_news": {
+        "en": "Could not fetch news at this time.",
+        "tr": "Şu anda haberler getirilemedi."
+    },
+    "trade_signal": {
+        "en": "Trade Signal",
+        "tr": "Ticaret Sinyali"
+    },
+    "coin": {
+        "en": "Coin",
+        "tr": "Coin"
+    },
+    "direction": {
+        "en": "Direction",
+        "tr": "Yön"
+    },
+    "entry": {
+        "en": "Entry",
+        "tr": "Giriş"
+    },
+    "take_profit": {
+        "en": "Take Profit",
+        "tr": "Kar Al"
+    },
+    "stop_loss": {
+        "en": "Stop Loss",
+        "tr": "Zarar Durdur"
+    },
+    "long": {
+        "en": "LONG",
+        "tr": "UZUN"
+    },
+    "short": {
+        "en": "SHORT",
+        "tr": "KISA"
+    },
+    # Ek çeviri anahtarları
+    "select_term_for_analysis": {
+        "en": "Select term for analysis:",
+        "tr": "Analiz için dönem seçiniz:"
+    },
+    "recommended_leverage": {
+        "en": "Recommended Leverage:",
+        "tr": "Önerilen Kaldıraç:"
+    },
+    "allocate_margin": {
+        "en": "Allocate 4.0% of your capital as margin.",
+        "tr": "Marjin olarak sermayenizin %4.0'ını ayırın."
+    }
 }
 
 def t(key, lang):
