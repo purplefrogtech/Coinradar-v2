@@ -1,20 +1,28 @@
+# ─────────────────────────────
+# Bölüm 1: İçe Aktarımlar ve API Ayarları
+# ─────────────────────────────
 import os
 import pandas as pd
 import ta
 import aiohttp
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from datetime import datetime, timedelta, timezone
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import io
 from urllib.parse import quote
-
-# Gemini API – Bu, varsayımsal bir kütüphanedir. Lütfen kendi gemini_api kütüphanenizi ve API anahtarınızı ayarlayın.
 import gemini_api
+
+# Gemini API – Varsayımsal entegrasyon. Gerçek API çağrısını gemini_completion() içine ekleyin.
 gemini_api.api_key = os.getenv("GEMINI_API_KEY") or "AIzaSyC_CyXwRjw0MTxZDagtZ78vR_-KbPqclGc"
+
+def gemini_completion(prompt, max_tokens=100, temperature=0.7):
+    # Örnek: Gerçek API çağrınızı burada yapın.
+    # Aşağıdaki satır simüle edilmiş bir cevap döndürüyor.
+    return {"choices": [{"text": "Simulated Gemini AI commentary: The market shows strong bullish momentum with solid support around pivot levels."}]}
 
 # Binance API endpoint
 BINANCE_API_URL = "https://api.binance.com/api/v3/klines"
@@ -26,13 +34,12 @@ TOKEN = '7183903208:AAExk376WQTmjhi9k3qabDSDYijkEEEljDE'
 NEWS_API_KEY = '58878f135c9c4d609f856aa552d2d12d'
 
 # Logging ayarları
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Allowed users and chat IDs
+# ─────────────────────────────
+# Bölüm 2: Global Değişkenler, Kullanıcı Ayarları ve Çeviri Sözlüğü
+# ─────────────────────────────
 ALLOWED_USERS = [
     'paraloperceo', 'LaunchControll', 'ensalgz', 'gorkemk6',
     'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716',
@@ -47,14 +54,14 @@ TARGET_COINS = [
 
 daily_notification_data = {'date': None, 'count': 0}
 user_last_active = {}
-user_favorites = {}      
-user_risk_settings = {}  
+user_favorites = {}
+user_risk_settings = {}
 INACTIVITY_THRESHOLD = timedelta(minutes=10)
 
 # Kullanıcı dil tercihleri (user_id -> "en" veya "tr")
 user_language = {}
 
-# Çeviri sözlüğü
+# Çeviri sözlüğü (her iki dil için)
 translations = {
     "choose_language": {"en": "Please choose your language:", "tr": "Lütfen dilinizi seçiniz:"},
     "language_set_en": {"en": "Language set to English.", "tr": "Dil İngilizce olarak ayarlandı."},
@@ -62,37 +69,39 @@ translations = {
     "welcome_message": {
         "en": (
             "Welcome to CoinRadar AI! 🎉\n\n"
-            "To receive a signal, use the command /coin <symbol> (e.g. /coin BTCUSDT).\n"
+            "Use /coin <symbol> to get a signal (e.g. /coin BTCUSDT).\n"
             "Or scan the market with:\n"
-            "/long - for long signals\n"
-            "/short - for short signals\n"
-            "/trend - for general market trend analysis\n\n"
-            "Additional commands:\n"
-            "/chart <symbol> [timeframe] - Get a technical chart (e.g., /chart BTCUSDT 4h)\n"
+            "/long - long signals\n"
+            "/short - short signals\n"
+            "/trend - market trend analysis\n\n"
+            "Other commands:\n"
+            "/chart <symbol> [timeframe] - Technical chart (e.g. /chart BTCUSDT 4h)\n"
             "/setfavorites <coin1,coin2,...> - Set your favorite coins\n"
             "/getfavorites - Show your favorite coins\n"
             "/setrisk <risk_percentage> - Set your risk percentage\n"
             "/getrisk - Show your risk setting\n"
-            "/realtime <symbol> - Get real-time price updates\n"
+            "/realtime <symbol> - Real-time price updates\n"
             "/adv_analysis <symbol> - Advanced technical analysis with AI commentary\n"
-            "/news - Get latest market news"
+            "/news - Latest market news\n"
+            "/lang <en/tr> - Change language"
         ),
         "tr": (
             "CoinRadar AI'ya hoşgeldiniz! 🎉\n\n"
-            "Sinyal almak için /coin <sembol> komutunu kullanın (örn. /coin BTCUSDT).\n"
-            "Ya da piyasayı taramak için:\n"
+            "/coin <sembol> komutuyla sinyal alın (örn. /coin BTCUSDT).\n"
+            "Veya piyasayı tarayın:\n"
             "/long - uzun sinyaller\n"
             "/short - kısa sinyaller\n"
-            "/trend - genel piyasa trend analizi\n\n"
-            "Ek komutlar:\n"
+            "/trend - piyasa trend analizi\n\n"
+            "Diğer komutlar:\n"
             "/chart <sembol> [zaman dilimi] - Teknik grafik (örn. /chart BTCUSDT 4h)\n"
             "/setfavorites <coin1,coin2,...> - Favori coinlerinizi ayarlayın\n"
-            "/getfavorites - Favori coinlerinizi görüntüleyin\n"
+            "/getfavorites - Favorilerinizi gösterin\n"
             "/setrisk <risk_yüzdesi> - Risk ayarınızı belirleyin\n"
-            "/getrisk - Risk ayarınızı görüntüleyin\n"
+            "/getrisk - Risk ayarınızı gösterin\n"
             "/realtime <sembol> - Gerçek zamanlı fiyat güncellemeleri\n"
             "/adv_analysis <sembol> - Gelişmiş teknik analiz (AI yorumlu)\n"
-            "/news - En güncel piyasa haberleri"
+            "/news - En güncel piyasa haberleri\n"
+            "/lang <en/tr> - Dil değiştirin"
         )
     },
     "news_header": {"en": "Latest Market News:", "tr": "En Güncel Piyasa Haberleri:"},
@@ -138,10 +147,10 @@ translations = {
     "signal_found": {"en": "Signal found!", "tr": "Sinyal bulundu!"}
 }
 
-def t(key: str, lang: str) -> str:
+def t(key, lang):
     return translations.get(key, {}).get(lang, "")
 
-def format_price(price: float) -> str:
+def format_price(price):
     if price >= 1:
         return f"{price:.4f}"
     elif price >= 0.01:
@@ -153,9 +162,12 @@ def format_price(price: float) -> str:
 
 def update_user_activity(update: Update) -> None:
     if update.effective_chat:
-        user_last_active[update.effective_chat.id] = datetime.utcnow()
+        user_last_active[update.effective_chat.id] = datetime.now(timezone.utc)
 
-async def get_crypto_data(symbol: str, interval: str = '1h', limit: int = 100) -> pd.DataFrame:
+# ─────────────────────────────
+# Bölüm 3: Kripto Veri Çekme ve Teknik Gösterge Hesaplamaları
+# ─────────────────────────────
+async def get_crypto_data(symbol, interval='1h', limit=100):
     try:
         url = f"{BINANCE_API_URL}?symbol={symbol}&interval={interval}&limit={limit}"
         async with aiohttp.ClientSession() as session:
@@ -176,7 +188,7 @@ async def get_crypto_data(symbol: str, interval: str = '1h', limit: int = 100) -
         logger.error(f"Error fetching data: {e}")
         return pd.DataFrame()
 
-def calculate_pivot_points(data: pd.DataFrame) -> dict:
+def calculate_pivot_points(data):
     last = data.iloc[-2]
     pivot = (last['high'] + last['low'] + last['close']) / 3
     return {
@@ -187,21 +199,21 @@ def calculate_pivot_points(data: pd.DataFrame) -> dict:
         'resistance2': pivot + (last['high'] - last['low'])
     }
 
-def calculate_macd(data: pd.DataFrame) -> pd.DataFrame:
+def calculate_macd(data):
     macd = ta.trend.MACD(close=data['close'], window_slow=12, window_fast=6, window_sign=3)
     data['macd'] = macd.macd()
     data['macd_signal'] = macd.macd_signal()
     data['macd_diff'] = macd.macd_diff()
     return data
 
-def calculate_atr(data: pd.DataFrame, period: int = 7) -> float:
+def calculate_atr(data, period=7):
     atr = ta.volatility.AverageTrueRange(high=data['high'], low=data['low'], close=data['close'], window=period)
     return atr.average_true_range().iloc[-1]
 
-def calculate_entry_price(data: pd.DataFrame) -> float:
+def calculate_entry_price(data):
     return data['open'].iloc[-1]
 
-async def get_technical_indicators(symbol: str, timeframe: str = '1h') -> dict:
+async def get_technical_indicators(symbol, timeframe='1h'):
     try:
         data = await get_crypto_data(symbol, interval=timeframe, limit=100)
         if data.empty:
@@ -225,7 +237,10 @@ async def get_technical_indicators(symbol: str, timeframe: str = '1h') -> dict:
         logger.error(f"Error in technical indicators for {symbol}: {e}")
         return {}
 
-def generate_signals(indicators: dict) -> dict:
+# ─────────────────────────────
+# Bölüm 4: Sinyal Üretimi
+# ─────────────────────────────
+def generate_signals(indicators):
     cp = indicators.get('current_price')
     pivots = indicators.get('pivot_points')
     atr = indicators.get('atr')
@@ -250,13 +265,15 @@ def generate_signals(indicators: dict) -> dict:
         'sl_short': cp + (1 * atr)
     }
 
+# ─────────────────────────────
+# Bölüm 5: Ticaret Bildirimleri ve Zaman Aralığı Mapping
+# ─────────────────────────────
 def is_user_allowed(update: Update) -> bool:
     return update.effective_user.username in ALLOWED_USERS
 
-async def send_trade_notification(context: ContextTypes.DEFAULT_TYPE, symbol: str, direction: str,
-                                  entry_price: float, tp: float, sl: float, lang: str) -> None:
+async def send_trade_notification(context, symbol, direction, entry_price, tp, sl, lang):
     global daily_notification_data
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     if daily_notification_data.get('date') != today:
         daily_notification_data['date'] = today
         daily_notification_data['count'] = 0
@@ -271,14 +288,14 @@ async def send_trade_notification(context: ContextTypes.DEFAULT_TYPE, symbol: st
            f"*{t('stop_loss', lang)}*: {format_price(sl)}\n")
     for chat_id in ALLOWED_CHAT_IDS:
         last = user_last_active.get(chat_id)
-        if last is None or (datetime.utcnow() - last) > INACTIVITY_THRESHOLD:
+        if last is None or (datetime.now(timezone.utc) - last) > INACTIVITY_THRESHOLD:
             try:
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode='Markdown')
             except Exception as e:
                 logger.error(f"Error sending notification to {chat_id}: {e}")
     daily_notification_data['count'] += 1
 
-def map_term_to_interval(term: str) -> str:
+def map_term_to_interval(term):
     term = term.lower()
     if term == "short":
         return "1h"
@@ -287,35 +304,33 @@ def map_term_to_interval(term: str) -> str:
     else:
         return "1d"
 
-# --- GEMINI API ile YAPAY ZEKA YORUMU (SADECE ADV ANALYSIS İÇİN) ---
-async def interpret_chart(symbol: str, timeframe: str, indicators: dict) -> str:
+# ─────────────────────────────
+# Bölüm 6: Gemini API ile Yapay Zeka Yorumlama
+# ─────────────────────────────
+async def interpret_chart(symbol, timeframe, indicators) -> str:
     try:
         data = indicators.get("data")
         if data is None or data.empty:
             return "Yeterli veri bulunamadı."
         prompt = (
-            f"Lütfen {symbol} için {timeframe} zaman diliminde oluşturulan teknik göstergeleri analiz et. "
-            f"Mevcut bilgiler:\n"
+            f"Lütfen {symbol} için {timeframe} zaman diliminde oluşturulan teknik göstergeleri analiz et.\n"
             f"- Güncel Fiyat: {indicators.get('current_price'):.4f}\n"
             f"- EMA20: {data['ema_20'].iloc[-1]:.4f}\n"
             f"- MACD: {data['macd'].iloc[-1]:.4f} (Signal: {data['macd_signal'].iloc[-1]:.4f})\n"
             f"- RSI: {data['rsi'].iloc[-1]:.2f}\n"
             f"Lütfen kısa ve öz bir piyasa yorumu yap."
         )
-        response = gemini_api.Completion.create(
-            model="gemini-1",
-            prompt=prompt,
-            max_tokens=100,
-            temperature=0.7
-        )
+        response = gemini_completion(prompt, max_tokens=100, temperature=0.7)
         analysis = response["choices"][0]["text"].strip()
         return analysis
     except Exception as e:
         logger.error(f"Gemini yorumlama hatası: {e}")
         return "Yapay zeka yorumlaması yapılamadı."
 
-# --- ANALYSIS FUNCTIONS (vade seçimine göre) ---
-async def coin_analysis_by_term(symbol: str, term: str, lang: str, username: str) -> (str, io.BytesIO):
+# ─────────────────────────────
+# Bölüm 7: Analiz Fonksiyonları
+# ─────────────────────────────
+async def coin_analysis_by_term(symbol, term, lang, username):
     tf = map_term_to_interval(term)
     indicators = await get_technical_indicators(symbol, tf)
     if not indicators:
@@ -339,7 +354,7 @@ async def coin_analysis_by_term(symbol: str, term: str, lang: str, username: str
         direction = None
     risk = user_risk_settings.get(username)
     if risk is not None and direction is not None:
-        rd = indicators['entry_price'] - signals['sl_long'] if direction == t("long", lang) else signals['sl_short'] - indicators['entry_price']
+        rd = (indicators['entry_price'] - signals['sl_long']) if direction == t("long", lang) else (signals['sl_short'] - indicators['entry_price'])
         if rd > 0:
             lev = round((indicators['entry_price'] * (risk / 100)) / rd, 1)
             msg += (f"\n*{t('risk_management', lang)}*\n"
@@ -349,7 +364,7 @@ async def coin_analysis_by_term(symbol: str, term: str, lang: str, username: str
     chart = await generate_chart(symbol, tf)
     return msg, chart
 
-async def long_signals_by_term(term: str, lang: str) -> str:
+async def long_signals_by_term(term, lang):
     tf = map_term_to_interval(term)
     sigs = []
     tasks = [get_technical_indicators(s, tf) for s in TARGET_COINS]
@@ -372,7 +387,7 @@ async def long_signals_by_term(term: str, lang: str) -> str:
     else:
         return "No strong long signals found at this time."
 
-async def short_signals_by_term(term: str, lang: str) -> str:
+async def short_signals_by_term(term, lang):
     tf = map_term_to_interval(term)
     sigs = []
     tasks = [get_technical_indicators(s, tf) for s in TARGET_COINS]
@@ -395,7 +410,7 @@ async def short_signals_by_term(term: str, lang: str) -> str:
     else:
         return "No strong short signals found at this time."
 
-async def trend_analysis_by_term(term: str, lang: str) -> (str, io.BytesIO):
+async def trend_analysis_by_term(term, lang):
     tf = map_term_to_interval(term)
     fng = None
     try:
@@ -430,7 +445,7 @@ async def trend_analysis_by_term(term: str, lang: str) -> (str, io.BytesIO):
     chart = await generate_trend_chart_custom(tf)
     return trend, chart
 
-async def generate_trend_chart_custom(interval: str) -> io.BytesIO:
+async def generate_trend_chart_custom(interval):
     data = await get_crypto_data("BTCUSDT", interval=interval, limit=60)
     if data.empty:
         return None
@@ -445,14 +460,17 @@ async def generate_trend_chart_custom(interval: str) -> io.BytesIO:
     ax.set_ylabel("Fiyat")
     ax.legend(loc='upper left')
     ax.grid(True)
+    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d %H:%M"))
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
     plt.close(fig)
     return buf
 
-# --- CHART GENERATION ---
-async def generate_chart(symbol: str, timeframe: str = "1h") -> io.BytesIO:
+# ─────────────────────────────
+# Bölüm 8: Grafik (Chart) Oluşturma Fonksiyonları
+# ─────────────────────────────
+async def generate_chart(symbol, timeframe="1h"):
     data = await get_crypto_data(symbol, interval=timeframe, limit=100)
     if data.empty:
         return None
@@ -497,231 +515,7 @@ async def generate_chart(symbol: str, timeframe: str = "1h") -> io.BytesIO:
     plt.close(fig)
     return buf
 
-async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    await update.message.reply_text(t("fetching_news", lang))
-    news_items = await get_market_news(lang)
-    if news_items:
-        header = t("news_header", lang)
-        text = header + "\n\n" + "\n\n".join(news_items)
-        await update.message.reply_text(text, parse_mode='Markdown', disable_web_page_preview=True)
-    else:
-        await update.message.reply_text(t("no_news", lang))
-
-# --- COIN NAME NORMALIZATION ---
-def normalize_coin_name(name: str) -> str:
-    mapping = {
-        "BTC": "BTCUSDT", "BITCOIN": "BTCUSDT",
-        "ETH": "ETHUSDT", "ETHEREUM": "ETHUSDT",
-        "BNB": "BNBUSDT", "BINANCE": "BNBUSDT"
-        # Diğer coinleri ekleyebilirsiniz.
-    }
-    key = name.strip().upper()
-    return mapping.get(key, key)
-
-# --- COMMANDS WITH TERM SELECTION ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    if user_id not in user_language:
-        keyboard = [
-            [InlineKeyboardButton("English", callback_data="lang_en")],
-            [InlineKeyboardButton("Türkçe", callback_data="lang_tr")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(t("choose_language", "en"), reply_markup=markup)
-        return
-    lang = user_language[user_id]
-    if is_user_allowed(update):
-        await update.message.reply_text(t("welcome_message", lang))
-    else:
-        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
-
-async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    await query.answer()
-    if query.data == "lang_en":
-        user_language[user_id] = "en"
-        msg = t("language_set_en", "en")
-    elif query.data == "lang_tr":
-        user_language[user_id] = "tr"
-        msg = t("language_set_tr", "tr")
-    else:
-        msg = "Error: Unknown language selection."
-    await query.edit_message_text(msg)
-
-async def coin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
-        return
-    if not context.args:
-        await update.message.reply_text(t("specify_coin", lang))
-        return
-    coin_input = " ".join(context.args)
-    symbol = normalize_coin_name(coin_input)
-    keyboard = [
-        [InlineKeyboardButton("Short Term", callback_data=f"analysis:coin:{symbol}:short")],
-        [InlineKeyboardButton("Medium Term", callback_data=f"analysis:coin:{symbol}:medium")],
-        [InlineKeyboardButton("Long Term", callback_data=f"analysis:coin:{symbol}:long")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select term for analysis:", reply_markup=markup)
-
-async def long_signals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
-        return
-    keyboard = [
-        [InlineKeyboardButton("Short Term", callback_data="analysis:long::short")],
-        [InlineKeyboardButton("Medium Term", callback_data="analysis:long::medium")],
-        [InlineKeyboardButton("Long Term", callback_data="analysis:long::long")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select term for long signals analysis:", reply_markup=markup)
-
-async def sell_signals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
-        return
-    keyboard = [
-        [InlineKeyboardButton("Short Term", callback_data="analysis:short::short")],
-        [InlineKeyboardButton("Medium Term", callback_data="analysis:short::medium")],
-        [InlineKeyboardButton("Long Term", callback_data="analysis:short::long")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select term for short signals analysis:", reply_markup=markup)
-
-async def trend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
-        return
-    keyboard = [
-        [InlineKeyboardButton("Short Term", callback_data="analysis:trend::short")],
-        [InlineKeyboardButton("Medium Term", callback_data="analysis:trend::medium")],
-        [InlineKeyboardButton("Long Term", callback_data="analysis:trend::long")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select term for trend analysis:", reply_markup=markup)
-
-async def analysis_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    parts = query.data.split(":")
-    if len(parts) != 4:
-        await query.edit_message_text("Invalid callback data.")
-        return
-    analysis_type = parts[1]
-    symbol = parts[2]
-    term = parts[3]
-    lang = user_language.get(query.from_user.id, "en")
-    final_msg = ""
-    final_photo = None
-    if analysis_type == "coin":
-        final_msg, final_photo = await coin_analysis_by_term(symbol, term, lang, query.from_user.username)
-    elif analysis_type == "long":
-        final_msg = await long_signals_by_term(term, lang)
-    elif analysis_type == "short":
-        final_msg = await short_signals_by_term(term, lang)
-    elif analysis_type == "trend":
-        final_msg, final_photo = await trend_analysis_by_term(term, lang)
-    else:
-        final_msg = "Unknown analysis type."
-    await query.message.delete()
-    if final_photo:
-        await context.bot.send_photo(chat_id=query.message.chat_id, photo=final_photo, caption=final_msg, parse_mode="Markdown")
-    else:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=final_msg, parse_mode="Markdown")
-
-async def realtime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    if not context.args:
-        await update.message.reply_text(t("realtime_usage", lang))
-        return
-    symbol = normalize_coin_name(context.args[0])
-    await update.message.reply_text(f"{t('connecting_realtime', lang)}{symbol}...")
-    ws_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@trade"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(ws_url) as ws:
-                count = 0
-                start = datetime.utcnow()
-                while count < 10 and (datetime.utcnow() - start).total_seconds() < 30:
-                    msg = await ws.receive()
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        data = msg.json()
-                        price = float(data.get('p', 0))
-                        tms = data.get('T')
-                        trade_time = datetime.utcfromtimestamp(tms/1000).strftime("%H:%M:%S")
-                        await update.message.reply_text(f"Real-time update for {symbol}:\nPrice: {price}\nTime: {trade_time}")
-                        count += 1
-                    elif msg.type == aiohttp.WSMsgType.ERROR:
-                        break
-    except Exception as e:
-        logger.error(f"Realtime error: {e}")
-        await update.message.reply_text(t("error_realtime", lang))
-
-async def chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    if not context.args:
-        await update.message.reply_text(t("chart_usage", lang))
-        return
-    symbol = normalize_coin_name(context.args[0])
-    timeframe = context.args[1] if len(context.args) > 1 else "1h"
-    await update.message.reply_text(t("chart_wait", lang))
-    img = await generate_chart(symbol, timeframe)
-    if img:
-        await update.message.reply_photo(photo=img)
-    else:
-        await update.message.reply_text(t("chart_error", lang))
-
-# --- Gelişmiş Analiz: Gemini API ile Yapay Zeka Yorumlaması ---
-async def adv_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user_id = update.effective_user.id
-    lang = user_language.get(user_id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    symbol = normalize_coin_name(" ".join(context.args)) if context.args else "BTCUSDT"
-    await update.message.reply_text(f"{t('adv_analysis_wait', lang)}{symbol}...")
-    indicators = await get_technical_indicators(symbol, "1h")
-    chart_img = await generate_adv_chart(symbol, "1h")
-    ai_comment = await interpret_chart(symbol, "1h", indicators)
-    final_caption = f"Advanced Technical Analysis for {symbol}\n\n{ai_comment}"
-    if chart_img:
-        await update.message.reply_photo(photo=chart_img, caption=final_caption, parse_mode='Markdown')
-    else:
-        await update.message.reply_text(final_caption)
-
-async def generate_adv_chart(symbol: str, timeframe: str = "1h") -> io.BytesIO:
+async def generate_adv_chart(symbol, timeframe="1h"):
     data = await get_crypto_data(symbol, interval=timeframe, limit=100)
     if data.empty:
         return None
@@ -767,7 +561,10 @@ async def generate_adv_chart(symbol: str, timeframe: str = "1h") -> io.BytesIO:
     plt.close(fig)
     return buf
 
-async def get_market_news(lang: str) -> list:
+# ─────────────────────────────
+# Bölüm 9: Piyasa Haberleri Fonksiyonları
+# ─────────────────────────────
+async def get_market_news(lang) -> list:
     if lang == "tr":
         query = quote('ekonomi OR finans OR "iş dünyası"')
         url = f"https://newsapi.org/v2/everything?q={query}&language=tr&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
@@ -821,7 +618,7 @@ async def get_market_news(lang: str) -> list:
             logger.error(f"Error in English news: {e}")
             return []
 
-async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def news(update, context) -> None:
     update_user_activity(update)
     user_id = update.effective_user.id
     lang = user_language.get(user_id, "en")
@@ -837,6 +634,288 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text(t("no_news", lang))
 
+# ─────────────────────────────
+# Bölüm 10: Telegram Komut İşleyicileri
+# ─────────────────────────────
+def normalize_coin_name(name: str) -> str:
+    mapping = {
+        "BTC": "BTCUSDT", "BITCOIN": "BTCUSDT",
+        "ETH": "ETHUSDT", "ETHEREUM": "ETHUSDT",
+        "BNB": "BNBUSDT", "BINANCE": "BNBUSDT"
+    }
+    key = name.strip().upper()
+    return mapping.get(key, key)
+
+async def start(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    if user_id not in user_language:
+        keyboard = [
+            [InlineKeyboardButton("English", callback_data="lang_en")],
+            [InlineKeyboardButton("Türkçe", callback_data="lang_tr")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(t("choose_language", "en"), reply_markup=markup)
+        return
+    lang = user_language[user_id]
+    if is_user_allowed(update):
+        await update.message.reply_text(t("welcome_message", lang))
+    else:
+        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
+
+async def language_callback(update, context) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    await query.answer()
+    if query.data == "lang_en":
+        user_language[user_id] = "en"
+        msg = t("language_set_en", "en")
+    elif query.data == "lang_tr":
+        user_language[user_id] = "tr"
+        msg = t("language_set_tr", "tr")
+    else:
+        msg = "Error: Unknown language selection."
+    await query.edit_message_text(msg)
+
+async def set_language(update, context) -> None:
+    update_user_activity(update)
+    if context.args:
+        new_lang = context.args[0].lower()
+        if new_lang in ["en", "tr"]:
+            user_language[update.effective_user.id] = new_lang
+            await update.message.reply_text(f"Language set to {new_lang}.")
+        else:
+            await update.message.reply_text("Invalid language code. Use 'en' or 'tr'.")
+    else:
+        await update.message.reply_text("Usage: /lang <en/tr>")
+
+async def coin(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
+        return
+    if not context.args:
+        await update.message.reply_text(t("specify_coin", lang))
+        return
+    coin_input = " ".join(context.args)
+    symbol = normalize_coin_name(coin_input)
+    keyboard = [
+        [InlineKeyboardButton("Short Term", callback_data=f"analysis:coin:{symbol}:short")],
+        [InlineKeyboardButton("Medium Term", callback_data=f"analysis:coin:{symbol}:medium")],
+        [InlineKeyboardButton("Long Term", callback_data=f"analysis:coin:{symbol}:long")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select term for analysis:", reply_markup=markup)
+
+async def long_signals(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
+        return
+    keyboard = [
+        [InlineKeyboardButton("Short Term", callback_data="analysis:long::short")],
+        [InlineKeyboardButton("Medium Term", callback_data="analysis:long::medium")],
+        [InlineKeyboardButton("Long Term", callback_data="analysis:long::long")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select term for long signals analysis:", reply_markup=markup)
+
+async def sell_signals(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
+        return
+    keyboard = [
+        [InlineKeyboardButton("Short Term", callback_data="analysis:short::short")],
+        [InlineKeyboardButton("Medium Term", callback_data="analysis:short::medium")],
+        [InlineKeyboardButton("Long Term", callback_data="analysis:short::long")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select term for short signals analysis:", reply_markup=markup)
+
+async def trend(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(f"{t('no_permission', lang)}\n{t('join_community', lang)}")
+        return
+    keyboard = [
+        [InlineKeyboardButton("Short Term", callback_data="analysis:trend::short")],
+        [InlineKeyboardButton("Medium Term", callback_data="analysis:trend::medium")],
+        [InlineKeyboardButton("Long Term", callback_data="analysis:trend::long")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select term for trend analysis:", reply_markup=markup)
+
+async def analysis_callback(update, context) -> None:
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split(":")
+    if len(parts) != 4:
+        await query.edit_message_text("Invalid callback data.")
+        return
+    analysis_type = parts[1]
+    symbol = parts[2]  # coin komutunda sembol; boş olabilir
+    term = parts[3]
+    lang = user_language.get(query.from_user.id, "en")
+    final_msg = ""
+    final_photo = None
+    if analysis_type == "coin":
+        final_msg, final_photo = await coin_analysis_by_term(symbol, term, lang, query.from_user.username)
+    elif analysis_type == "long":
+        final_msg = await long_signals_by_term(term, lang)
+    elif analysis_type == "short":
+        final_msg = await short_signals_by_term(term, lang)
+    elif analysis_type == "trend":
+        final_msg, final_photo = await trend_analysis_by_term(term, lang)
+    else:
+        final_msg = "Unknown analysis type."
+    await query.message.delete()
+    if final_photo:
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=final_photo, caption=final_msg, parse_mode="Markdown")
+    else:
+        await context.bot.send_message(chat_id=query.message.chat_id, text=final_msg, parse_mode="Markdown")
+
+async def realtime(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(t("no_permission", lang))
+        return
+    if not context.args:
+        await update.message.reply_text(t("realtime_usage", lang))
+        return
+    symbol = normalize_coin_name(context.args[0])
+    await update.message.reply_text(f"{t('connecting_realtime', lang)}{symbol}...")
+    ws_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@trade"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(ws_url) as ws:
+                count = 0
+                start = datetime.now(timezone.utc)
+                while count < 10 and (datetime.now(timezone.utc) - start).total_seconds() < 30:
+                    msg = await ws.receive()
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        data = msg.json()
+                        price = float(data.get('p', 0))
+                        tms = data.get('T')
+                        trade_time = datetime.utcfromtimestamp(tms/1000).strftime("%H:%M:%S")
+                        await update.message.reply_text(f"Real-time update for {symbol}:\nPrice: {price}\nTime: {trade_time}")
+                        count += 1
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        break
+    except Exception as e:
+        logger.error(f"Realtime error: {e}")
+        await update.message.reply_text(t("error_realtime", lang))
+
+async def chart(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(t("no_permission", lang))
+        return
+    if not context.args:
+        await update.message.reply_text(t("chart_usage", lang))
+        return
+    symbol = normalize_coin_name(context.args[0])
+    timeframe = context.args[1] if len(context.args) > 1 else "1h"
+    await update.message.reply_text(t("chart_wait", lang))
+    img = await generate_chart(symbol, timeframe)
+    if img:
+        await update.message.reply_photo(photo=img)
+    else:
+        await update.message.reply_text(t("chart_error", lang))
+
+async def adv_analysis(update, context) -> None:
+    update_user_activity(update)
+    user_id = update.effective_user.id
+    lang = user_language.get(user_id, "en")
+    if not is_user_allowed(update):
+        await update.message.reply_text(t("no_permission", lang))
+        return
+    symbol = normalize_coin_name(" ".join(context.args)) if context.args else "BTCUSDT"
+    await update.message.reply_text(f"{t('adv_analysis_wait', lang)}{symbol}...")
+    indicators = await get_technical_indicators(symbol, "1h")
+    chart_img = await generate_adv_chart(symbol, "1h")
+    ai_comment = await interpret_chart(symbol, "1h", indicators)
+    final_caption = f"Advanced Technical Analysis for {symbol}\n\n{ai_comment}"
+    if chart_img:
+        await update.message.reply_photo(photo=chart_img, caption=final_caption, parse_mode='Markdown')
+    else:
+        await update.message.reply_text(final_caption)
+
+# ─────────────────────────────
+# Bölüm 11: Favoriler ve Risk Yönetimi Fonksiyonları
+# ─────────────────────────────
+def set_favorites(update, context) -> None:
+    update_user_activity(update)
+    user = update.effective_user
+    lang = user_language.get(user.id, "en")
+    if not is_user_allowed(update):
+        update.message.reply_text(t("no_permission", lang))
+        return
+    if not context.args:
+        update.message.reply_text(t("setfavorites_usage", lang))
+        return
+    favs = [fav.strip().upper() for fav in " ".join(context.args).split(',')]
+    user_favorites[user.username] = favs
+    update.message.reply_text(t("favorites_set", lang) + ", ".join(favs))
+
+def get_favorites(update, context) -> None:
+    update_user_activity(update)
+    user = update.effective_user
+    lang = user_language.get(user.id, "en")
+    if not is_user_allowed(update):
+        update.message.reply_text(t("no_permission", lang))
+        return
+    favs = user_favorites.get(user.username, [])
+    if not favs:
+        update.message.reply_text(t("no_favorites", lang))
+    else:
+        update.message.reply_text(t("your_favorites", lang) + ", ".join(favs))
+
+def set_risk(update, context) -> None:
+    update_user_activity(update)
+    user = update.effective_user
+    lang = user_language.get(user.id, "en")
+    if not is_user_allowed(update):
+        update.message.reply_text(t("no_permission", lang))
+        return
+    if not context.args:
+        update.message.reply_text(t("setrisk_usage", lang))
+        return
+    try:
+        risk = float(context.args[0])
+        user_risk_settings[user.username] = risk
+        update.message.reply_text(f"{t('risk_set', lang)}{risk}%")
+    except Exception:
+        update.message.reply_text(t("invalid_risk", lang))
+
+def get_risk(update, context) -> None:
+    update_user_activity(update)
+    user = update.effective_user
+    lang = user_language.get(user.id, "en")
+    if not is_user_allowed(update):
+        update.message.reply_text(t("no_permission", lang))
+        return
+    risk = user_risk_settings.get(user.username)
+    if risk is None:
+        update.message.reply_text(t("no_risk", lang))
+    else:
+        update.message.reply_text(f"{t('your_risk', lang)}{risk}%")
+
+# ─────────────────────────────
+# Bölüm 12: Ana Fonksiyon ve Bot Başlatma
+# ─────────────────────────────
 def main() -> None:
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
@@ -854,65 +933,8 @@ def main() -> None:
     app.add_handler(CommandHandler("realtime", realtime))
     app.add_handler(CommandHandler("adv_analysis", adv_analysis))
     app.add_handler(CommandHandler("news", news))
+    app.add_handler(CommandHandler("lang", set_language))
     app.run_polling()
-
-# --- FAVORITES & RISK MANAGEMENT ---
-async def set_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user = update.effective_user
-    lang = user_language.get(user.id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    if not context.args:
-        await update.message.reply_text(t("setfavorites_usage", lang))
-        return
-    favs = [fav.strip().upper() for fav in " ".join(context.args).split(',')]
-    user_favorites[user.username] = favs
-    await update.message.reply_text(t("favorites_set", lang) + ", ".join(favs))
-
-async def get_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user = update.effective_user
-    lang = user_language.get(user.id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    favs = user_favorites.get(user.username, [])
-    if not favs:
-        await update.message.reply_text(t("no_favorites", lang))
-    else:
-        await update.message.reply_text(t("your_favorites", lang) + ", ".join(favs))
-
-async def set_risk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user = update.effective_user
-    lang = user_language.get(user.id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    if not context.args:
-        await update.message.reply_text(t("setrisk_usage", lang))
-        return
-    try:
-        risk = float(context.args[0])
-        user_risk_settings[user.username] = risk
-        await update.message.reply_text(f"{t('risk_set', lang)}{risk}%")
-    except Exception:
-        await update.message.reply_text(t("invalid_risk", lang))
-
-async def get_risk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    update_user_activity(update)
-    user = update.effective_user
-    lang = user_language.get(user.id, "en")
-    if not is_user_allowed(update):
-        await update.message.reply_text(t("no_permission", lang))
-        return
-    risk = user_risk_settings.get(user.username)
-    if risk is None:
-        await update.message.reply_text(t("no_risk", lang))
-    else:
-        await update.message.reply_text(f"{t('your_risk', lang)}{risk}%")
 
 if __name__ == "__main__":
     main()
