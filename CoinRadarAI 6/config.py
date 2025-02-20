@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 # Global değişkenler
 ALLOWED_USERS = [
     'paraloperceo', 'LaunchControll', 'ensalgz', 'gorkemk6',
-    'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Ern5716',
+    'WOULTHERR', 'MacqTrulz', 'janexander', 'mmmmonur', 'Xkraltr5716',
     'Lord1334', 'thebatyroff', 'M_Senol24', 'farukaknc', 'Proakm09',
     'Poseidonaf', 'Ferro_11_Shaman'
 ]
-ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927, 5140980618, 1307456822, 1332756927, 6123690668, 1119304862]
+# Tekrarlayan chat_id'ler kaldırılarak
+ALLOWED_CHAT_IDS = [5124738136, 5633085280, 1332756927, 5140980618, 1307456822, 6123690668, 1119304862]
 
-# Hedef coin sayısını artırdık (örneğin, 15 farklı coin)
 TARGET_COINS = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT',
     'SOLUSDT', 'DOTUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LTCUSDT',
@@ -37,7 +37,6 @@ INACTIVITY_THRESHOLD = timedelta(minutes=10)
 # Kullanıcı dil tercihleri (user_id -> "en" veya "tr")
 user_language = {}
 
-# Çeviri sözlüğü
 translations = {
     "choose_language": {
         "en": "Please choose your language:",
@@ -221,7 +220,6 @@ translations = {
         "en": "SHORT",
         "tr": "KISA"
     },
-    # Ek çeviri anahtarları
     "select_term_for_analysis": {
         "en": "Select term for analysis:",
         "tr": "Analiz için dönem seçiniz:"
@@ -238,3 +236,5 @@ translations = {
 
 def t(key, lang):
     return translations.get(key, {}).get(lang, "")
+
+LATEST_VERSION = 1.1

@@ -221,7 +221,6 @@ async def adv_analysis(update: Update, context):
     await update.message.reply_text(f"{t('adv_analysis_wait', lang)}{symbol}...")
     indicators = await get_technical_indicators(symbol, "1h")
     chart_img = await generate_adv_chart(symbol, "1h")
-    # interpret_chart artık Gemini API çağrısı yapmadığından boş dönecek
     ai_comment = ""
     final_caption = f"Advanced Technical Analysis for {symbol}\n\n{ai_comment}"
     if chart_img:
